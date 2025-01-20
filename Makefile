@@ -152,6 +152,8 @@ clean:
 	mkfs/mkfs .gdbinit \
         $U/usys.S \
 	$(UPROGS)
+	sudo umount mnt
+	rm -rf mnt
 
 # try to generate a unique GDB port
 GDBPORT = $(shell expr `id -u` % 5000 + 25000)
@@ -169,7 +171,15 @@ QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
 QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
 qemu: $K/kernel fs.img
+	rm fs.img 
+	truncate -s 2M fs.img
+	mkfs.ext2 -g 2048 -b 1024 fs.img
+	mkdir mnt
+	sudo mount  -o loop fs.img mnt
+	$(foreach prog,$(UPROGS),sudo cp $(prog) mnt;)
 	$(QEMU) $(QEMUOPTS)
+
+
 
 .gdbinit: .gdbinit.tmpl-riscv
 	sed "s/:1234/:$(GDBPORT)/" < $^ > $@
