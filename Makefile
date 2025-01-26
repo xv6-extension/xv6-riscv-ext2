@@ -56,7 +56,7 @@ LD = $(TOOLPREFIX)ld
 OBJCOPY = $(TOOLPREFIX)objcopy
 OBJDUMP = $(TOOLPREFIX)objdump
 
-CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
+CFLAGS = -Wall -Werror -fno-omit-frame-pointer -ggdb -gdwarf-4 -g3
 CFLAGS += -MD
 CFLAGS += -mcmodel=medany
 # CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
@@ -146,13 +146,13 @@ fs.img: mkfs/mkfs README $(UPROGS)
 -include kernel/*.d user/*.d
 
 clean: 
+
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*/*.o */*.d */*.asm */*.sym \
 	$U/initcode $U/initcode.out $K/kernel fs.img \
 	mkfs/mkfs .gdbinit \
         $U/usys.S \
 	$(UPROGS)
-	sudo umount mnt
 	rm -rf mnt
 
 # try to generate a unique GDB port
@@ -177,6 +177,7 @@ qemu: $K/kernel fs.img
 	mkdir mnt
 	sudo mount  -o loop fs.img mnt
 	$(foreach prog,$(UPROGS),sudo cp $(prog) mnt;)
+	sudo umount mnt
 	$(QEMU) $(QEMUOPTS)
 
 

@@ -1,3 +1,6 @@
+// skipped: 
+//in ilock function what is ad?
+//what is S_IDIR
 // File system implementation.  Five layers:
 //   + Blocks: allocator for raw disk blocks.
 //   + Log: crash recovery for multi-step updates.
@@ -24,26 +27,47 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 // there should be one superblock per disk device, but we run with
 // only one device
-struct superblock sb; 
+struct ext2_superblock sb; 
 
+static uint
+ext2fs_free_block(char *bitmap)
+{
+  int i, j, mask;
+  for(i = 0; i < sb.s_blocks_per_group * 8; i++)
+  {
+    for(j = 0; j < 8; j++)
+    {
+      mask = 1 << (7 - j);
+      if ((bitmap[i] & mask) == 0)
+      {
+        bitmap[i] |= mask;
+        return i * 8 + j;
+      }
+    }
+  }
+  return -1;
+}
 // Read the super block.
 static void
-readsb(int dev, struct superblock *sb)
+readsb(int dev, struct ext2_superblock *sb)
 {
   struct buf *bp;
 
   bp = bread(dev, 1);
   memmove(sb, bp->data, sizeof(*sb));
   brelse(bp);
+  printf("number of inodes is: %u\n",sb->ninodes);
+  printf("number of blocks is: %u\n",sb->nblocks);
 }
+
 
 // Init fs
 void
 fsinit(int dev) {
   readsb(dev, &sb);
-  if(sb.magic != FSMAGIC)
+  if(sb.magic != EXT2_FSMAGIC)
     panic("invalid file system");
-  initlog(dev, &sb);
+ // initlog(dev, &sb);
 }
 
 // Zero a block.
@@ -54,7 +78,7 @@ bzero(int dev, int bno)
 
   bp = bread(dev, bno);
   memset(bp->data, 0, BSIZE);
-  log_write(bp);
+  //log_write(bp);
   brelse(bp);
 }
 
@@ -75,7 +99,7 @@ balloc(uint dev)
       m = 1 << (bi % 8);
       if((bp->data[bi/8] & m) == 0){  // Is block free?
         bp->data[bi/8] |= m;  // Mark block in use.
-        log_write(bp);
+       // log_write(bp);
         brelse(bp);
         bzero(dev, b + bi);
         return b + bi;
@@ -100,7 +124,7 @@ bfree(int dev, uint b)
   if((bp->data[bi/8] & m) == 0)
     panic("freeing free block");
   bp->data[bi/8] &= ~m;
-  log_write(bp);
+ // log_write(bp);
   brelse(bp);
 }
 
@@ -181,6 +205,7 @@ struct {
 void
 iinit()
 {
+  printf("called iinit\n");
   int i = 0;
   
   initlock(&itable.lock, "itable");
@@ -195,7 +220,10 @@ static struct inode* iget(uint dev, uint inum);
 // Mark it as allocated by  giving it type type.
 // Returns an unlocked but allocated and referenced inode,
 // or NULL if there is no free inode.
-struct inode*
+
+
+
+/*struct inode*
 ialloc(uint dev, short type)
 {
   int inum;
@@ -204,11 +232,11 @@ ialloc(uint dev, short type)
 
   for(inum = 1; inum < sb.ninodes; inum++){
     bp = bread(dev, IBLOCK(inum, sb));
-    dip = (struct dinode*)bp->data + inum%IPB;
+    dip = (struct dinode*)bp->data + ((inum-1) % sb.s_inodes_per_group);
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip));
       dip->type = type;
-      log_write(bp);   // mark it allocated on the disk
+    //  log_write(bp);   // mark it allocated on the disk
       brelse(bp);
       return iget(dev, inum);
     }
@@ -216,7 +244,47 @@ ialloc(uint dev, short type)
   }
   printf("ialloc: no inodes\n");
   return 0;
+}*/
+struct inode* ialloc(uint dev, short type)
+{
+  printf("called ialloc\n");
+    int fbit, bno, iindex, inum;
+  struct buf *bp1, *bp2, *bp3;
+  struct ext2_dinode *din;
+  struct group_desc bgdesc;
+    bp1 = bread(dev, 2);
+    memmove(&bgdesc, bp1->data, sizeof(bgdesc));
+    brelse(bp1);
+
+    bp2 = bread(dev, bgdesc.inode_bitmap);
+    fbit = ext2fs_free_block((char *)bp2->data);
+    if (fbit == -1){
+      brelse(bp2);
+      panic("ext2_ialloc: no inodes");
+    }
+
+    bno = bgdesc.inode_table + fbit / (BSIZE / sizeof(struct ext2_dinode));    
+    iindex = fbit % (BSIZE / sizeof(struct ext2_dinode));
+    bp3 = bread(dev, bno);
+    din = (struct ext2_dinode *)bp3->data + iindex;
+    memset(din, 0, sizeof(*din));
+    if (type == T_DIR)      //folder?
+      din->i_mode = EXT2_T_DIR;
+    else if (type == T_FILE)
+      din->i_mode = EXT2_T_FILE;
+    bwrite(bp3);
+    bwrite(bp2);
+    brelse(bp3);
+    brelse(bp2);
+
+    inum =  fbit + 1;    //index of inode in the disk
+    printf("done\n");
+    return iget(dev, inum);
+  
+  
+
 }
+
 
 // Copy a modified in-memory inode to disk.
 // Must be called after every change to an ip->xxx field
@@ -225,6 +293,7 @@ ialloc(uint dev, short type)
 void
 iupdate(struct inode *ip)
 {
+  printf("called iupdate\n");
   struct buf *bp;
   struct dinode *dip;
 
@@ -236,7 +305,7 @@ iupdate(struct inode *ip)
   dip->nlink = ip->nlink;
   dip->size = ip->size;
   memmove(dip->addrs, ip->addrs, sizeof(ip->addrs));
-  log_write(bp);
+  //log_write(bp);
   brelse(bp);
 }
 
@@ -246,6 +315,7 @@ iupdate(struct inode *ip)
 static struct inode*
 iget(uint dev, uint inum)
 {
+  printf("called iget\n");
   struct inode *ip, *empty;
 
   acquire(&itable.lock);
@@ -281,6 +351,7 @@ iget(uint dev, uint inum)
 struct inode*
 idup(struct inode *ip)
 {
+  printf("called idup\n");
   acquire(&itable.lock);
   ip->ref++;
   release(&itable.lock);
@@ -292,26 +363,40 @@ idup(struct inode *ip)
 void
 ilock(struct inode *ip)
 {
+  printf("called ilock\n");
   struct buf *bp;
-  struct dinode *dip;
-
+  struct group_desc group;
+  struct ext2_dinode din;
+  int offset;
+  int bno;
+  int index;
   if(ip == 0 || ip->ref < 1)
     panic("ilock");
 
   acquiresleep(&ip->lock);
 
   if(ip->valid == 0){
-    bp = bread(ip->dev, IBLOCK(ip->inum, sb));
-    dip = (struct dinode*)bp->data + ip->inum%IPB;
-    ip->type = dip->type;
-    ip->major = dip->major;
-    ip->minor = dip->minor;
-    ip->nlink = dip->nlink;
-    ip->size = dip->size;
-    memmove(ip->addrs, dip->addrs, sizeof(ip->addrs));
+    offset= EXT2_IBLOCK(ip->inum, sb);
+    bp = bread(ip->dev, 2);
+    memmove(&group,bp->data,sizeof(group));
     brelse(bp);
-    ip->valid = 1;
-    if(ip->type == 0)
+    //bgdesc.bg_inode_table + ioff / (EXT2_BSIZE / ext2_sb.s_inode_size);
+    bno=group.inode_table + offset/(BSIZE/sb.s_inode_size);
+    index = offset % BSIZE/sb.s_inode_size;
+    bp = bread(ip->dev,bno);
+    memmove(&din,bp->data+index*sb.s_inode_size,sizeof(din));
+    brelse(bp);
+  if ( din.i_mode == EXT2_T_DIR|| din.i_mode == T_DIR)
+      ip->type = T_DIR;
+  else
+      ip->type = T_FILE;
+  ip->major = 0;
+  ip->minor = 0;
+  ip->nlink = din.i_links_count;
+  ip->size = din.i_size;
+  //memmove(ad->addrs, din.i_block, sizeof(ad->addrs));
+  ip->valid = 1;
+  if(ip->type == 0)
       panic("ilock: no type");
   }
 }
@@ -320,6 +405,7 @@ ilock(struct inode *ip)
 void
 iunlock(struct inode *ip)
 {
+  printf("called iunlock\n");
   if(ip == 0 || !holdingsleep(&ip->lock) || ip->ref < 1)
     panic("iunlock");
 
@@ -336,6 +422,7 @@ iunlock(struct inode *ip)
 void
 iput(struct inode *ip)
 {
+  printf("called iput\n");
   acquire(&itable.lock);
 
   if(ip->ref == 1 && ip->valid && ip->nlink == 0){
@@ -365,6 +452,7 @@ iput(struct inode *ip)
 void
 iunlockput(struct inode *ip)
 {
+  printf("called iunlockput\n");
   iunlock(ip);
   iput(ip);
 }
@@ -382,6 +470,7 @@ iunlockput(struct inode *ip)
 static uint
 bmap(struct inode *ip, uint bn)
 {
+  printf("called bmap\n");
   uint addr, *a;
   struct buf *bp;
 
@@ -410,7 +499,7 @@ bmap(struct inode *ip, uint bn)
       addr = balloc(ip->dev);
       if(addr){
         a[bn] = addr;
-        log_write(bp);
+       // log_write(bp);
       }
     }
     brelse(bp);
@@ -425,6 +514,7 @@ bmap(struct inode *ip, uint bn)
 void
 itrunc(struct inode *ip)
 {
+  printf("called itrunc\n");
   int i, j;
   struct buf *bp;
   uint *a;
@@ -457,6 +547,7 @@ itrunc(struct inode *ip)
 void
 stati(struct inode *ip, struct stat *st)
 {
+  printf("called stati\n");
   st->dev = ip->dev;
   st->ino = ip->inum;
   st->type = ip->type;
@@ -471,6 +562,7 @@ stati(struct inode *ip, struct stat *st)
 int
 readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {
+  printf("called readi\n");
   uint tot, m;
   struct buf *bp;
 
@@ -505,6 +597,7 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 int
 writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
 {
+  printf("called writei\n");
   uint tot, m;
   struct buf *bp;
 
@@ -523,7 +616,7 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
       brelse(bp);
       break;
     }
-    log_write(bp);
+   // log_write(bp);
     brelse(bp);
   }
 
@@ -551,6 +644,7 @@ namecmp(const char *s, const char *t)
 struct inode*
 dirlookup(struct inode *dp, char *name, uint *poff)
 {
+  printf("called dirloopkup\n");
   uint off, inum;
   struct dirent de;
 
@@ -579,6 +673,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
 int
 dirlink(struct inode *dp, char *name, uint inum)
 {
+  printf("called dirlink\n");
   int off;
   struct dirent de;
   struct inode *ip;
@@ -622,6 +717,7 @@ dirlink(struct inode *dp, char *name, uint inum)
 static char*
 skipelem(char *path, char *name)
 {
+  printf("called skipelem\n");
   char *s;
   int len;
 
@@ -651,6 +747,7 @@ skipelem(char *path, char *name)
 static struct inode*
 namex(char *path, int nameiparent, char *name)
 {
+  printf("called namex\n");
   struct inode *ip, *next;
 
   if(*path == '/')
@@ -686,6 +783,7 @@ namex(char *path, int nameiparent, char *name)
 struct inode*
 namei(char *path)
 {
+  printf("called namei\n");
   char name[DIRSIZ];
   return namex(path, 0, name);
 }
@@ -693,5 +791,6 @@ namei(char *path)
 struct inode*
 nameiparent(char *path, char *name)
 {
+  printf("called nameiparent\n");
   return namex(path, 1, name);
 }
