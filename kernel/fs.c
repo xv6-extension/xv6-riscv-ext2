@@ -351,6 +351,57 @@ iupdate(struct inode *ip)
 // Find the inode with number inum on device dev
 // and return the in-memory copy. Does not lock
 // the inode and does not read it from disk.
+struct inode*
+iget(uint dev, uint inum)
+{
+  struct inode *ip, *empty;
+  int i, j;
+
+  acquire(&icache.lock);
+
+  // Is the inode already cached?
+  empty = 0;
+  for(ip = &icache.inode[0]; ip < &icache.inode[NINODE]; ip++){
+    if(ip->ref > 0 && ip->dev == dev && ip->inum == inum){
+      ip->ref++;
+      release(&icache.lock);
+      return ip;
+    }
+    if(empty == 0 && ip->ref == 0)    // Remember empty slot.
+      empty = ip;
+  }
+
+  for(i = 0; i < NINODE; i++){
+    if (xv6fs_addrs[i].busy == 0)
+      break;
+  }
+  for(j = 0; j < NINODE; j++){
+    if (ext2fs_addrs[i].busy == 0)
+      break;
+  }
+
+  // Recycle an inode cache entry.
+  if(empty == 0)
+    panic("iget: no inodes");
+
+  ip = empty;
+  ip->dev = dev;
+  ip->inum = inum;
+  ip->ref = 1;
+  ip->valid = 0;
+  if (dev == ROOTDEV) {
+    ip->iops = &xv6fs_inode_ops;
+    ip->addrs = (void *)&xv6fs_addrs[i];
+    xv6fs_addrs[i].busy = 1;
+  } else {
+    ip->iops = &ext2fs_inode_ops;
+    ip->addrs = (void *)&ext2fs_addrs[j];
+    ext2fs_addrs[j].busy = 1;
+  }
+  release(&icache.lock);
+
+  return ip;
+}
 static struct inode*
 iget(uint dev, uint inum)
 {
@@ -836,7 +887,10 @@ namex(char *path, int nameiparent, char *name)
   struct inode *ip, *next;
 
   if(*path == '/')
-    ip = iget(ROOTDEV, EXT2_ROOTINO);
+  {
+  ip = iget(ROOTDEV, EXT2_ROOTINO);
+  ilock(ip);
+  }
   else
     ip = idup(myproc()->cwd);
 
@@ -869,7 +923,7 @@ struct inode*
 namei(char *path)
 {
   printf("called namei\n");
-  char name[DIRSIZ];
+  char name[EXT2_DIRSIZ];
   return namex(path, 0, name);
 }
 
