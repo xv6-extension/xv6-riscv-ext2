@@ -212,6 +212,7 @@ iinit()
   for(i = 0; i < NINODE; i++) {
     initsleeplock(&itable.inode[i].lock, "inode");
   }
+  printf("exiting iinit\n");
 }
 
 static struct inode* iget(uint dev, uint inum);
@@ -295,6 +296,44 @@ iupdate(struct inode *ip)
 {
   printf("called iupdate\n");
   struct buf *bp;
+  struct ext2_dinode din;
+  struct group_desc gdes;
+  int bno, iindex;
+  uint *ad;
+  bp = bread(ip->dev, 2);
+  memmove(&gdes, bp->data, sizeof(gdes));
+  brelse(bp);
+  bno = gdes.inode_table + (ip->inum - 1) / (BSIZE/sb.s_inode_size);
+  iindex = (ip->inum - 1) % (BSIZE/sb.s_inode_size);
+  bp = bread(ip->dev, bno);
+  memmove(&din, bp->data + iindex * sb.s_inode_size, sizeof(din));
+  if (ip->type == T_DIR)
+    din.i_mode = EXT2_T_DIR;
+  if (ip->type == T_FILE)
+    din.i_mode = EXT2_T_FILE;
+  din.i_links_count = ip->nlink;
+  din.i_size = ip->size;
+  din.i_dtime = 0;
+  din.i_faddr = 0;
+  din.i_file_acl = 0;
+  din.i_flags = 0;
+  din.i_generation = 0;
+  din.i_gid = 0;
+  din.i_mtime = 0;
+  din.i_uid = 0;
+  din.i_atime = 0;
+
+  ad = ip->addrs;
+  memmove(din.i_block, ad, sizeof(ad));
+  memmove(bp->data + (iindex * sb.s_inode_size), &din, sizeof(din));
+  bwrite(bp);
+  brelse(bp);
+}
+/*void
+iupdate(struct inode *ip)
+{
+  printf("called iupdate\n");
+  struct buf *bp;
   struct dinode *dip;
 
   bp = bread(ip->dev, IBLOCK(ip->inum, sb));
@@ -307,7 +346,7 @@ iupdate(struct inode *ip)
   memmove(dip->addrs, ip->addrs, sizeof(ip->addrs));
   //log_write(bp);
   brelse(bp);
-}
+}*/
 
 // Find the inode with number inum on device dev
 // and return the in-memory copy. Does not lock
@@ -344,6 +383,8 @@ iget(uint dev, uint inum)
   release(&itable.lock);
 
   return ip;
+  printf("exiting iget\n");
+
 }
 
 // Increment reference count for ip.
@@ -399,6 +440,7 @@ ilock(struct inode *ip)
   if(ip->type == 0)
       panic("ilock: no type");
   }
+  printf("exiting ilock\n");
 }
 
 // Unlock the given inode.
@@ -408,7 +450,7 @@ iunlock(struct inode *ip)
   printf("called iunlock\n");
   if(ip == 0 || !holdingsleep(&ip->lock) || ip->ref < 1)
     panic("iunlock");
-
+  printf("exiting iunlock\n");
   releasesleep(&ip->lock);
 }
 
@@ -419,6 +461,47 @@ iunlock(struct inode *ip)
 // to it, free the inode (and its content) on disk.
 // All calls to iput() must be inside a transaction in
 // case it has to free the inode.
+/*void
+iput(struct inode *ip)
+{
+  //struct ext2fs_addrs *ad;
+  //acquiresleep(&ip->lock);
+  printf("called iput");
+  acquire(&itable.lock);
+ // ad = (struct ext2fs_addrs *)ip->addrs;
+  if(ip->valid && ip->nlink == 0){
+    //acquire(&icache.lock);
+    acquiresleep(&ip->lock);
+    int r = ip->ref;
+    //release(&icache.lock);
+    release(&itable.lock);
+    if(r == 1){
+      // inode has no links and no other references: truncate and free.
+     
+      //ext2fs_ifree(ip);
+      //ext2fs_itrunc(ip);
+      itrunc(ip);
+      ip->type = 0;
+      ip->valid = 0;
+      iupdate(ip);
+      //ip->addrs = 0;
+      releasesleep(&ip->lock);
+      acquire(&itable.lock);
+    }
+  }
+  releasesleep(&ip->lock);
+
+  //acquire(&icache.lock);
+  ip->ref--;
+  if (ip->ref == 0){
+    ad->busy = 0;
+    ip->addrs = 0;
+  }
+  release(&itable.lock);
+  //release(&icache.lock);
+
+  return;
+}*/
 void
 iput(struct inode *ip)
 {
@@ -427,7 +510,7 @@ iput(struct inode *ip)
 
   if(ip->ref == 1 && ip->valid && ip->nlink == 0){
     // inode has no links and no other references: truncate and free.
-
+    printf("entered if");
     // ip->ref == 1 means no other process can have ip locked,
     // so this acquiresleep() won't block (or deadlock).
     acquiresleep(&ip->lock);
@@ -446,6 +529,7 @@ iput(struct inode *ip)
 
   ip->ref--;
   release(&itable.lock);
+  printf("exiting iput\n");
 }
 
 // Common idiom: unlock, then put.
@@ -455,6 +539,7 @@ iunlockput(struct inode *ip)
   printf("called iunlockput\n");
   iunlock(ip);
   iput(ip);
+  printf("exiting iunlockput\n");
 }
 
 // Inode content
@@ -751,7 +836,7 @@ namex(char *path, int nameiparent, char *name)
   struct inode *ip, *next;
 
   if(*path == '/')
-    ip = iget(ROOTDEV, ROOTINO);
+    ip = iget(ROOTDEV, EXT2_ROOTINO);
   else
     ip = idup(myproc()->cwd);
 
