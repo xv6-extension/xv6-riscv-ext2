@@ -186,6 +186,13 @@ qemu: $K/kernel fs.img
 	sed "s/:1234/:$(GDBPORT)/" < $^ > $@
 
 qemu-gdb: $K/kernel .gdbinit fs.img
+	rm fs.img 
+	truncate -s 2M fs.img
+	mkfs.ext2 -g 2048 -b 1024 fs.img
+	mkdir mnt
+	sudo mount  -o loop fs.img mnt
+	$(foreach prog,$(UPROGS),sudo cp $(prog) mnt;)
+	sudo umount mnt
 	@echo "*** Now run 'gdb' in another window." 1>&2
 	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
 

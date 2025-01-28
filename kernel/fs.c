@@ -351,57 +351,6 @@ iupdate(struct inode *ip)
 // Find the inode with number inum on device dev
 // and return the in-memory copy. Does not lock
 // the inode and does not read it from disk.
-struct inode*
-iget(uint dev, uint inum)
-{
-  struct inode *ip, *empty;
-  int i, j;
-
-  acquire(&icache.lock);
-
-  // Is the inode already cached?
-  empty = 0;
-  for(ip = &icache.inode[0]; ip < &icache.inode[NINODE]; ip++){
-    if(ip->ref > 0 && ip->dev == dev && ip->inum == inum){
-      ip->ref++;
-      release(&icache.lock);
-      return ip;
-    }
-    if(empty == 0 && ip->ref == 0)    // Remember empty slot.
-      empty = ip;
-  }
-
-  for(i = 0; i < NINODE; i++){
-    if (xv6fs_addrs[i].busy == 0)
-      break;
-  }
-  for(j = 0; j < NINODE; j++){
-    if (ext2fs_addrs[i].busy == 0)
-      break;
-  }
-
-  // Recycle an inode cache entry.
-  if(empty == 0)
-    panic("iget: no inodes");
-
-  ip = empty;
-  ip->dev = dev;
-  ip->inum = inum;
-  ip->ref = 1;
-  ip->valid = 0;
-  if (dev == ROOTDEV) {
-    ip->iops = &xv6fs_inode_ops;
-    ip->addrs = (void *)&xv6fs_addrs[i];
-    xv6fs_addrs[i].busy = 1;
-  } else {
-    ip->iops = &ext2fs_inode_ops;
-    ip->addrs = (void *)&ext2fs_addrs[j];
-    ext2fs_addrs[j].busy = 1;
-  }
-  release(&icache.lock);
-
-  return ip;
-}
 static struct inode*
 iget(uint dev, uint inum)
 {
@@ -452,6 +401,48 @@ idup(struct inode *ip)
 
 // Lock the given inode.
 // Reads the inode from disk if necessary.
+void
+rootilock(struct inode *ip)
+{
+  printf("called ilock\n");
+  struct buf *bp;
+  struct group_desc group;
+  struct ext2_dinode din;
+  int offset;
+  int bno;
+  int index;
+  if(ip == 0 || ip->ref < 1)
+    panic("ilock");
+
+  // acquiresleep(&ip->lock);
+
+  if(ip->valid == 0){
+    offset= ip->inum;
+    bp = bread(ip->dev, 2);
+    memmove(&group,bp->data,sizeof(group));
+    brelse(bp);
+    //bgdesc.bg_inode_table + ioff / (EXT2_BSIZE / ext2_sb.s_inode_size);
+    bno=group.inode_table;
+    index = offset;
+    bp = bread(ip->dev,bno);
+    memmove(&din,bp->data+index*128,sizeof(din));
+    brelse(bp);
+  if ( din.i_mode == EXT2_T_DIR|| din.i_mode == T_DIR)
+      ip->type = T_DIR;
+  else
+      ip->type = T_FILE;
+  ip->major = 0;
+  ip->minor = 0;
+  ip->nlink = din.i_links_count;
+  ip->size = din.i_size;
+  memmove(ip->addrs, din.i_block, sizeof(ip->addrs));
+  ip->valid = 1;
+  if(ip->type == 0)
+      panic("ilock: no type");
+  }
+  printf("exiting ilock\n");
+}
+
 void
 ilock(struct inode *ip)
 {
@@ -887,12 +878,17 @@ namex(char *path, int nameiparent, char *name)
   struct inode *ip, *next;
 
   if(*path == '/')
-  {
-  ip = iget(ROOTDEV, EXT2_ROOTINO);
-  ilock(ip);
-  }
+    ip = iget(ROOTDEV, EXT2_ROOTINO);
   else
+  {
     ip = idup(myproc()->cwd);
+  }
+
+  if (*(path+1))
+  {
+    if (!ip->valid && ip->inum == EXT2_ROOTINO)
+      rootilock(ip);
+  }
 
   while((path = skipelem(path, name)) != 0){
     ilock(ip);
