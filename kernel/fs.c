@@ -760,6 +760,70 @@ bmap(struct inode *ip, uint bn)
   }
   panic("ext2_bmap: block number out of range\n");
 }
+/*static uint
+bmap(struct inode *ip, uint bn)
+{
+  uint addr, *a , *b , *c;
+  struct buf *bp, *bp1, *bp2;
+
+  if (bn < EXT2_NDIRECT){
+    if ((addr = ip->addrs[bn]) == 0)
+      ip->addrs[bn] = addr = balloc(ip->dev);
+    return addr;
+  }
+  bn -= EXT2_NDIRECT;
+  if (bn < EXT2_NINDIRECT){
+    if ((addr = ip->addrs[EXT2_IINDIRECT]) == 0)
+      ip->addrs[EXT2_IINDIRECT] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if ((addr = a[bn]) == 0)
+      a[bn] = addr = balloc(ip->dev);
+    brelse(bp);
+    return addr;
+  }
+  bn -= EXT2_NIDIRECT;
+
+  if (bn < EXT2_NDINDIRECT){
+    if ((addr = ip->addrs[EXT2_IDINDIRECT]) == 0)
+      ip->addrs[EXT2_IDINDIRECT] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if ((addr = a[bn / EXT2_NIDIRECT]) == 0)
+      a[bn / EXT2_NIDIRECT] = addr = balloc(ip->dev);
+    bp1 = bread(ip->dev, addr);
+    b = (uint *)bp1->data;
+    if ((addr = b[bn / EXT2_NIDIRECT]) == 0)
+      b[bn / EXT2_NIDIRECT] = addr = balloc(ip->dev);
+    brelse(bp);
+    brelse(bp1);
+    return addr;
+  }
+  bn -= EXT2_NDINDIRECT;
+
+  if (bn < EXT2_NTINDIRECT){
+    if ((addr = ip->addrs[EXT2_ITINDIRECT]) == 0)
+      ip->addrs[EXT2_ITINDIRECT] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if ((addr = a[bn / EXT2_NIDIRECT]) == 0)
+      a[bn / EXT2_NIDIRECT] = addr = balloc(ip->dev);
+    bp1 = bread(ip->dev, addr);
+    b = (uint *)bp1->data;
+    if ((addr = b[bn / EXT2_NIDIRECT]) == 0)
+      b[bn / EXT2_NIDIRECT] = addr = balloc(ip->dev);
+    bp2 = bread(ip->dev, addr);
+    c = (uint *)bp2->data;
+    if ((addr = c[bn / EXT2_NIDIRECT]) == 0)
+      c[bn / EXT2_NIDIRECT] = addr = balloc(ip->dev);
+    brelse(bp);
+    brelse(bp1);
+    brelse(bp2);
+    return addr;
+  }
+  panic("ext2_bmap: block number out of range\n");
+}
+*/
 
 
 // Truncate inode (discard contents).
@@ -820,6 +884,20 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
   struct buf *bp;
 
   if(off > ip->size || off + n < off)
+    return -1;
+  if(off + n > ip->size)
+    n = ip->size - off;
+
+  for(tot = 0; tot < n; tot += m, off += m, dst += m){
+    bp = bread(ip->dev, bmap(ip, off / BSIZE));
+    m = min(n - tot, BSIZE - off % BSIZE);
+    printf("%d",m);
+    memmove((char*)dst, bp->data + off % BSIZE, m);
+    brelse(bp);
+  }
+  return n;
+
+  /*if(off > ip->size || off + n < off)
     return 0;
   if(off + n > ip->size)
     n = ip->size - off;
@@ -837,7 +915,7 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
     }
     brelse(bp);
   }
-  return tot;
+  return tot;*/
 }
 
 // Write data to inode.
@@ -937,7 +1015,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
       continue;
     strncpy(file_name, de.name, de.name_len);
     file_name[de.name_len] = '\0';
-    if(namecmp(name, de.name) == 0){
+    if((namecmp(name, de.name+1) == 0 && de.name[0]=='_') || namecmp(name, de.name) == 0){
       // entry matches path element
       if(poff)
         *poff = off;

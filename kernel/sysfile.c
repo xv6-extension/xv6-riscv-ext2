@@ -389,6 +389,7 @@ sys_mkdir(void)
 uint64
 sys_mknod(void)
 {
+  printf("\n reached mknod\n");
   struct inode *ip;
   char path[MAXPATH];
   int major, minor;
