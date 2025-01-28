@@ -137,9 +137,18 @@ struct dinode {
 // Directory is a file containing a sequence of dirent structures.
 #define DIRSIZ 14
 #define EXT2_DIRSIZ 255
+#define EXT2_NAME_LEN 255
 
 struct dirent {
   ushort inum;
   char name[DIRSIZ];
 };
+struct ext2_dirent {
+	uint	inode;			/* Inode number */
+	ushort	rec_len;		/* Directory entry length */
+	uchar	name_len;		/* Name length */
+	uchar	file_type;
+	char	name[EXT2_NAME_LEN];	/* File name */
+};
+
 

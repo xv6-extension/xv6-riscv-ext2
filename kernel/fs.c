@@ -770,7 +770,7 @@ namecmp(const char *s, const char *t)
 
 // Look for a directory entry in a directory.
 // If found, set *poff to byte offset of entry.
-struct inode*
+/*struct inode*
 dirlookup(struct inode *dp, char *name, uint *poff)
 {
   printf("called dirloopkup\n");
@@ -790,6 +790,34 @@ dirlookup(struct inode *dp, char *name, uint *poff)
       if(poff)
         *poff = off;
       inum = de.inum;
+      return iget(dp->dev, inum);
+    }
+  }
+
+  return 0;
+}*/
+struct inode*
+dirlookup(struct inode *dp, char *name, uint *poff)
+{
+  printf("called dirloopkup\n");
+  uint off, inum;
+  struct ext2_dirent de;
+  char file_name[EXT2_NAME_LEN + 1];
+  if(dp->type != T_DIR)
+    panic("dirlookup not DIR");
+
+  for(off = 0; off < dp->size; off += de.rec_len){
+    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+      panic("dirlookup read");
+    if(de.inode == 0)
+      continue;
+    strncpy(file_name, de.name, de.name_len);
+    file_name[de.name_len] = '\0';
+    if(namecmp(name, de.name) == 0){
+      // entry matches path element
+      if(poff)
+        *poff = off;
+      inum = de.inode;
       return iget(dp->dev, inum);
     }
   }
