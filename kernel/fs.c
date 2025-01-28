@@ -427,18 +427,19 @@ rootilock(struct inode *ip)
     bp = bread(ip->dev,bno);
     memmove(&din,bp->data+index*128,sizeof(din));
     brelse(bp);
-  if ( din.i_mode == EXT2_T_DIR|| din.i_mode == T_DIR)
-      ip->type = T_DIR;
-  else
-      ip->type = T_FILE;
-  ip->major = 0;
-  ip->minor = 0;
-  ip->nlink = din.i_links_count;
-  ip->size = din.i_size;
-  memmove(ip->addrs, din.i_block, sizeof(ip->addrs));
-  ip->valid = 1;
-  if(ip->type == 0)
-      panic("ilock: no type");
+    printf("inode in ilock: %d %d\n", ip->inum, din.i_mode);
+    if ( GET_FILE_MODE(din.i_mode) == EXT2_T_DIR|| din.i_mode == T_DIR)
+        ip->type = T_DIR;
+    else
+        ip->type = T_FILE;
+    ip->major = 0;
+    ip->minor = 0;
+    ip->nlink = din.i_links_count;
+    ip->size = din.i_size;
+    memmove(ip->addrs, din.i_block, sizeof(ip->addrs));
+    ip->valid = 1;
+    if(ip->type == 0)
+        panic("ilock: no type");
   }
   printf("exiting ilock\n");
 }
@@ -469,18 +470,19 @@ ilock(struct inode *ip)
     bp = bread(ip->dev,bno);
     memmove(&din,bp->data+index*sb.s_inode_size,sizeof(din));
     brelse(bp);
-  if ( din.i_mode == EXT2_T_DIR|| din.i_mode == T_DIR)
-      ip->type = T_DIR;
-  else
-      ip->type = T_FILE;
-  ip->major = 0;
-  ip->minor = 0;
-  ip->nlink = din.i_links_count;
-  ip->size = din.i_size;
-  //memmove(ad->addrs, din.i_block, sizeof(ad->addrs));
-  ip->valid = 1;
-  if(ip->type == 0)
-      panic("ilock: no type");
+    printf("inode in ilock: %d %d\n", ip->inum, din.i_mode);
+    if ( GET_FILE_MODE(din.i_mode) == EXT2_T_DIR|| din.i_mode == T_DIR)
+        ip->type = T_DIR;
+    else
+        ip->type = T_FILE;
+    ip->major = 0;
+    ip->minor = 0;
+    ip->nlink = din.i_links_count;
+    ip->size = din.i_size;
+    //memmove(ad->addrs, din.i_block, sizeof(ad->addrs));
+    ip->valid = 1;
+    if(ip->type == 0)
+        panic("ilock: no type");
   }
   printf("exiting ilock\n");
 }
