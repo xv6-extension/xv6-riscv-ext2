@@ -25,7 +25,6 @@ entry("close");
 entry("kill");
 entry("exec");
 entry("open");
-entry("mknod");
 entry("unlink");
 entry("fstat");
 entry("link");

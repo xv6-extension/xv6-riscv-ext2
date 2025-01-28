@@ -173,9 +173,9 @@ QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 qemu: $K/kernel fs.img
 	rm fs.img 
 	truncate -s 2M fs.img
-	mkfs.ext2 -g 2048 -b 1024 fs.img
+	mkfs.ext2 -g 2048 -b 1024 -r 0 fs.img
 	mkdir mnt
-	sudo mount  -o loop fs.img mnt
+	sudo mount -o loop fs.img mnt
 	$(foreach prog,$(UPROGS),sudo cp $(prog) mnt;)
 	sudo umount mnt
 	$(QEMU) $(QEMUOPTS)
@@ -188,9 +188,9 @@ qemu: $K/kernel fs.img
 qemu-gdb: $K/kernel .gdbinit fs.img
 	rm fs.img 
 	truncate -s 2M fs.img
-	mkfs.ext2 -g 2048 -b 1024 fs.img
+	mkfs.ext2 -g 2048 -b 1024 -r 0 fs.img
 	mkdir mnt
-	sudo mount  -o loop fs.img mnt
+	sudo mount -o loop fs.img mnt
 	$(foreach prog,$(UPROGS),sudo cp $(prog) mnt;)
 	sudo umount mnt
 	@echo "*** Now run 'gdb' in another window." 1>&2

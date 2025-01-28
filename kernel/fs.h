@@ -1,6 +1,12 @@
 // On-disk file system format.
 // Both the kernel and user programs use this header file.
-
+#define INODESIZE 128
+#define EXT2_INDIRECT                   (BSIZE / sizeof(uint))
+#define	EXT2_NDIR_BLOCKS		12
+#define	EXT2_IND_BLOCK			EXT2_NDIR_BLOCKS
+#define	EXT2_DIND_BLOCK			(EXT2_IND_BLOCK + 1)
+#define	EXT2_TIND_BLOCK			(EXT2_DIND_BLOCK + 1)
+#define	EXT2_N_BLOCKS			(EXT2_TIND_BLOCK + 1)
 #define EXT2_IDIRECT 0
 #define EXT2_NDIRECT 12
 #define EXT2_IINDIRECT (EXT2_NDIRECT)
@@ -50,16 +56,6 @@ struct ext2_superblock {
   uint logstart;     // Block number of first log block
   uint inodestart;   // Block number of first inode block
   uint bmapstart;    // Block number of first free map block
-  uint	s_first_ino; 		/* First non-reserved inode */
-	ushort   s_inode_size; 		/* size of inode structure */
-	ushort	s_block_group_nr; 	/* block group # of this superblock */
-	uint	s_feature_compat; 	/* compatible feature set */
-	uint	s_feature_incompat; 	/* incompatible feature set */
-	uint	s_feature_ro_compat; 	/* readonly-compatible feature set */
-	uchar	s_uuid[16];		/* 128-bit uuid for volume */
-	char	s_volume_name[16]; 	/* volume name */
-	char	s_last_mounted[64]; 	/* directory where last mounted */
-	uint	s_algorithm_usage_bitmap;
 };
 struct group_desc
 {
@@ -110,15 +106,6 @@ struct ext2_dinode {
 	uint	i_file_acl;	/* File ACL */
 	uint	i_dir_acl;	/* Directory ACL */
 	uint	i_faddr;
-  
-		struct {
-			ushort	l_i_frag;	/* Fragment number */
-			ushort	l_i_fsize;	/* Fragment size */
-			ushort	i_pad1;
-			ushort	l_i_uid_high;	/* these 2 fields    */
-			ushort	l_i_gid_high;	/* were reserved2[0] */
-			uint	l_i_reserved2;
-		} linux2;
 };
 struct dinode {
   short type;           // File type

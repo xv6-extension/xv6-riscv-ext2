@@ -262,14 +262,12 @@ struct {
 void
 iinit()
 {
-  printf("called iinit\n");
   int i = 0;
   
   initlock(&itable.lock, "itable");
   for(i = 0; i < NINODE; i++) {
     initsleeplock(&itable.inode[i].lock, "inode");
   }
-  printf("exiting iinit\n");
 }
 
 static struct inode* iget(uint dev, uint inum);
@@ -305,7 +303,6 @@ ialloc(uint dev, short type)
 }*/
 struct inode* ialloc(uint dev, short type)
 {
-  printf("called ialloc\n");
     int fbit, bno, iindex, inum;
   struct buf *bp1, *bp2, *bp3;
   struct ext2_dinode *din;
@@ -336,11 +333,7 @@ struct inode* ialloc(uint dev, short type)
     brelse(bp2);
 
     inum =  fbit + 1;    //index of inode in the disk
-    printf("done\n");
     return iget(dev, inum);
-  
-  
-
 }
 
 
@@ -360,10 +353,10 @@ iupdate(struct inode *ip)
   bp = bread(ip->dev, 2);
   memmove(&gdes, bp->data, sizeof(gdes));
   brelse(bp);
-  bno = gdes.inode_table + (ip->inum - 1) / (BSIZE/sb.s_inode_size);
-  iindex = (ip->inum - 1) % (BSIZE/sb.s_inode_size);
+  bno = gdes.inode_table + (ip->inum - 1) / (BSIZE/INODESIZE);
+  iindex = (ip->inum - 1) % (BSIZE/INODESIZE);
   bp = bread(ip->dev, bno);
-  memmove(&din, bp->data + iindex * sb.s_inode_size, sizeof(din));
+  memmove(&din, bp->data + iindex * INODESIZE, sizeof(din));
   if (ip->type == T_DIR)
     din.i_mode = EXT2_T_DIR;
   if (ip->type == T_FILE)
@@ -382,7 +375,7 @@ iupdate(struct inode *ip)
 
   ad = ip->addrs;
   memmove(din.i_block, ad, sizeof(ad));
-  memmove(bp->data + (iindex * sb.s_inode_size), &din, sizeof(din));
+  memmove(bp->data + (iindex * INODESIZE), &din, sizeof(din));
   bwrite(bp);
   brelse(bp);
 }
@@ -411,7 +404,7 @@ iupdate(struct inode *ip)
 static struct inode*
 iget(uint dev, uint inum)
 {
-  printf("called iget\n");
+  printf("called iget for inum %d\n", inum);
   struct inode *ip, *empty;
 
   acquire(&itable.lock);
@@ -440,7 +433,6 @@ iget(uint dev, uint inum)
   release(&itable.lock);
 
   return ip;
-  printf("exiting iget\n");
 
 }
 
@@ -449,7 +441,6 @@ iget(uint dev, uint inum)
 struct inode*
 idup(struct inode *ip)
 {
-  printf("called idup\n");
   acquire(&itable.lock);
   ip->ref++;
   release(&itable.lock);
@@ -461,30 +452,24 @@ idup(struct inode *ip)
 void
 rootilock(struct inode *ip)
 {
-  printf("called ilock\n");
   struct buf *bp;
   struct group_desc group;
   struct ext2_dinode din;
-  int offset;
   int bno;
-  int index;
   if(ip == 0 || ip->ref < 1)
     panic("ilock");
 
   // acquiresleep(&ip->lock);
 
   if(ip->valid == 0){
-    offset= ip->inum;
     bp = bread(ip->dev, 2);
     memmove(&group,bp->data,sizeof(group));
     brelse(bp);
-    //bgdesc.bg_inode_table + ioff / (EXT2_BSIZE / ext2_sb.s_inode_size);
     bno=group.inode_table;
-    index = offset;
     bp = bread(ip->dev,bno);
-    memmove(&din,bp->data+index*128,sizeof(din));
+    memmove(&din,bp->data+INODESIZE,sizeof(din));
     brelse(bp);
-    printf("inode in ilock: %d %d\n", ip->inum, din.i_mode);
+    // printf("inode in ilock: %d %d\n", ip->inum, din.i_mode);
     if ( GET_FILE_MODE(din.i_mode) == EXT2_T_DIR|| din.i_mode == T_DIR)
         ip->type = T_DIR;
     else
@@ -498,61 +483,53 @@ rootilock(struct inode *ip)
     if(ip->type == 0)
         panic("ilock: no type");
   }
-  printf("exiting ilock\n");
 }
 
 void
 ilock(struct inode *ip)
 {
-  printf("called ilock\n");
-  struct buf *bp;
+  struct buf *bp, *bp1;
   struct group_desc group;
   struct ext2_dinode din;
   int offset;
   int bno;
-  int index;
   if(ip == 0 || ip->ref < 1)
     panic("ilock");
-
+  
   acquiresleep(&ip->lock);
 
   if(ip->valid == 0){
-    offset= EXT2_IBLOCK(ip->inum, sb);
+    offset= ip->inum - 1;
     bp = bread(ip->dev, 2);
     memmove(&group,bp->data,sizeof(group));
     brelse(bp);
-    //bgdesc.bg_inode_table + ioff / (EXT2_BSIZE / ext2_sb.s_inode_size);
-    bno=group.inode_table + offset/(BSIZE/sb.s_inode_size);
-    index = offset % BSIZE/sb.s_inode_size;
-    bp = bread(ip->dev,bno);
-    memmove(&din,bp->data+index*sb.s_inode_size,sizeof(din));
-    brelse(bp);
-    printf("inode in ilock: %d %d\n", ip->inum, din.i_mode);
+    bno=group.inode_table + offset / (BSIZE/INODESIZE);  
+    bp1 = bread(ip->dev,bno);
+    memmove(&din,bp1->data+(offset % (BSIZE/INODESIZE))*INODESIZE,sizeof(din));
+    brelse(bp1);
+    // printf("inode in ilock: %d %d\n", ip->inum, din.i_mode);
     if ( GET_FILE_MODE(din.i_mode) == EXT2_T_DIR|| din.i_mode == T_DIR)
         ip->type = T_DIR;
     else
         ip->type = T_FILE;
     ip->major = 0;
-    ip->minor = 0;
+    ip->minor = 0;  
     ip->nlink = din.i_links_count;
     ip->size = din.i_size;
-    //memmove(ad->addrs, din.i_block, sizeof(ad->addrs));
     memmove(ip->addrs, din.i_block, sizeof(ip->addrs));
     ip->valid = 1;
     if(ip->type == 0)
         panic("ilock: no type");
   }
-  printf("exiting ilock\n");
 }
 
 // Unlock the given inode.
 void
 iunlock(struct inode *ip)
 {
-  printf("called iunlock\n");
+  // printf("called iunlock for ip with inum %d\n", ip->inum);
   if(ip == 0 || !holdingsleep(&ip->lock) || ip->ref < 1)
     panic("iunlock");
-  printf("exiting iunlock\n");
   releasesleep(&ip->lock);
 }
 
@@ -607,12 +584,10 @@ iput(struct inode *ip)
 void
 iput(struct inode *ip)
 {
-  printf("called iput\n");
   acquire(&itable.lock);
 
   if(ip->ref == 1 && ip->valid && ip->nlink == 0){
     // inode has no links and no other references: truncate and free.
-    printf("entered if");
     // ip->ref == 1 means no other process can have ip locked,
     // so this acquiresleep() won't block (or deadlock).
     acquiresleep(&ip->lock);
@@ -625,23 +600,20 @@ iput(struct inode *ip)
     ip->valid = 0;
 
     releasesleep(&ip->lock);
-
     acquire(&itable.lock);
   }
 
   ip->ref--;
   release(&itable.lock);
-  printf("exiting iput\n");
 }
 
 // Common idiom: unlock, then put.
 void
 iunlockput(struct inode *ip)
 {
-  printf("called iunlockput\n");
+  // printf("iunlockputing ip with inum %u\n", ip->inum);
   iunlock(ip);
   iput(ip);
-  printf("exiting iunlockput\n");
 }
 
 // Inode content
@@ -828,7 +800,7 @@ bmap(struct inode *ip, uint bn)
 
 // Truncate inode (discard contents).
 // Caller must hold ip->lock.
-void
+/*void
 itrunc(struct inode *ip)
 {
   printf("called itrunc\n");
@@ -857,6 +829,96 @@ itrunc(struct inode *ip)
 
   ip->size = 0;
   iupdate(ip);
+}*/
+void
+itrunc(struct inode *ip)
+{
+
+  printf("called itrunc\n");
+  int i,j,k;
+  struct buf *bp1, *bp2 , *bp3;
+  uint *a , *b , *c;
+  //direct
+  for (int i = 0; i < EXT2_NDIR_BLOCKS; i++){
+    if (ip->addrs[i]){
+      bfree(ip->dev, ip->addrs[i]);    //check free function
+      ip->addrs[i] = 0;
+    }
+  }
+  //indirect
+   if (ip->addrs[EXT2_IND_BLOCK]){
+    bp1 = bread(ip->dev, ip->addrs[EXT2_IND_BLOCK]);
+    a = (uint *)bp1->data;
+    for (i = 0; i < EXT2_INDIRECT; i++){
+      if(a[i]){
+        bfree(ip->dev, a[i]);
+        a[i] = 0;
+      }
+    }
+    brelse(bp1);
+    bfree(ip->dev, ip->addrs[EXT2_IND_BLOCK]);
+    ip->addrs[EXT2_IND_BLOCK] = 0;
+  }
+
+  // for double indirect blocks
+  if (ip->addrs[EXT2_DIND_BLOCK]){
+    bp1 = bread(ip->dev, ip->addrs[EXT2_DIND_BLOCK]);
+    a = (uint *)bp1->data;
+    for (i = 0; i < EXT2_INDIRECT; i++){
+      if(a[i]){
+        bp2 = bread(ip->dev, a[i]);
+	b = (uint *)bp2->data;
+	for (j = 0; j < EXT2_INDIRECT; j++){
+          if(b[j]){
+	    bfree(ip->dev, b[j]);
+            b[j] = 0;
+	  }
+	}
+	brelse(bp2);
+	bfree(ip->dev, a[i]);
+	a[i] = 0;
+      }
+    }
+    brelse(bp1);
+    bfree(ip->dev, ip->addrs[EXT2_DIND_BLOCK]);
+    ip->addrs[EXT2_DIND_BLOCK] = 0;
+  }
+
+  // for triple indirect blocks
+  if (ip->addrs[EXT2_TIND_BLOCK]){
+    bp1 = bread(ip->dev, ip->addrs[EXT2_TIND_BLOCK]);
+    a = (uint *)bp1->data;
+    for (i = 0; i < EXT2_INDIRECT; i++){
+      if(a[i]){
+        bp2 = bread(ip->dev, a[i]);
+	b = (uint *)bp2->data;
+	for (j = 0; j < EXT2_INDIRECT; j++){
+	  if (b[j]){
+	    bp3 = bread(ip->dev, b[j]);
+	    c = (uint *)bp3->data;
+	    for (k = 0; k < EXT2_INDIRECT; k++){
+	      if (c[k]){
+	        bfree(ip->dev, c[k]);
+		c[k] = 0;
+	      }
+	    }
+	    brelse(bp3);
+	    bfree(ip->dev, b[j]);
+	    b[j] = 0;
+	  }
+	}
+	brelse(bp2);
+	bfree(ip->dev, a[i]);
+	a[i] = 0;
+      }
+    }
+    brelse(bp1);
+    bfree(ip->dev, ip->addrs[EXT2_TIND_BLOCK]);
+    ip->addrs[EXT2_TIND_BLOCK] = 0;
+  }
+
+  ip->size = 0;
+  iupdate(ip);
 }
 
 // Copy stat information from inode.
@@ -864,7 +926,6 @@ itrunc(struct inode *ip)
 void
 stati(struct inode *ip, struct stat *st)
 {
-  printf("called stati\n");
   st->dev = ip->dev;
   st->ino = ip->inum;
   st->type = ip->type;
@@ -879,7 +940,6 @@ stati(struct inode *ip, struct stat *st)
 int
 readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {
-  printf("called readi\n");
   uint tot, m;
   struct buf *bp;
 
@@ -891,7 +951,6 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
   for(tot = 0; tot < n; tot += m, off += m, dst += m){
     bp = bread(ip->dev, bmap(ip, off / BSIZE));
     m = min(n - tot, BSIZE - off % BSIZE);
-    printf("%d",m);
     memmove((char*)dst, bp->data + off % BSIZE, m);
     brelse(bp);
   }
@@ -1001,7 +1060,6 @@ dirlookup(struct inode *dp, char *name, uint *poff)
 struct inode*
 dirlookup(struct inode *dp, char *name, uint *poff)
 {
-  printf("called dirloopkup\n");
   uint off, inum;
   struct ext2_dirent de;
   char file_name[EXT2_NAME_LEN + 1];
@@ -1076,7 +1134,6 @@ dirlink(struct inode *dp, char *name, uint inum)
 static char*
 skipelem(char *path, char *name)
 {
-  printf("called skipelem\n");
   char *s;
   int len;
 
@@ -1106,7 +1163,6 @@ skipelem(char *path, char *name)
 static struct inode*
 namex(char *path, int nameiparent, char *name)
 {
-  printf("called namex\n");
   struct inode *ip, *next;
 
   if(*path == '/')
@@ -1150,7 +1206,6 @@ namex(char *path, int nameiparent, char *name)
 struct inode*
 namei(char *path)
 {
-  printf("called namei\n");
   char name[EXT2_DIRSIZ];
   return namex(path, 0, name);
 }
@@ -1158,6 +1213,5 @@ namei(char *path)
 struct inode*
 nameiparent(char *path, char *name)
 {
-  printf("called nameiparent\n");
   return namex(path, 1, name);
 }

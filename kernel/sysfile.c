@@ -309,12 +309,20 @@ sys_open(void)
   struct file *f;
   struct inode *ip;
   int n;
-
+  char console[10]= "console";
   argint(1, &omode);
   if((n = argstr(0, path, MAXPATH)) < 0)
     return -1;
-
+  if(strncmp(path,console , 10) ==0)
+  {
+    f= filealloc();
+    f->type = FD_DEVICE ;
+    f->major = CONSOLE;
+    fd = fdalloc(f);
+    return fd;
+  }
   begin_op();
+
 
   if(omode & O_CREATE){
     ip = create(path, T_FILE, 0, 0);
@@ -386,7 +394,7 @@ sys_mkdir(void)
   return 0;
 }
 
-uint64
+/*uint64
 sys_mknod(void)
 {
   printf("\n reached mknod\n");
@@ -405,7 +413,7 @@ sys_mknod(void)
   iunlockput(ip);
   end_op();
   return 0;
-}
+}*/
 
 uint64
 sys_chdir(void)
