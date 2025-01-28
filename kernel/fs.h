@@ -1,7 +1,15 @@
 // On-disk file system format.
 // Both the kernel and user programs use this header file.
 
-
+#define EXT2_IDIRECT 0
+#define EXT2_NDIRECT 12
+#define EXT2_IINDIRECT (EXT2_NDIRECT)
+#define EXT2_NINDIRECT (BSIZE / sizeof(uint))
+#define EXT2_IDINDIRECT (EXT2_NDIRECT + 1)
+#define EXT2_NDINDIRECT (EXT2_NINDIRECT * EXT2_NINDIRECT)
+#define EXT2_ITINDIRECT (EXT2_IDINDIRECT + 1)
+#define EXT2_NTINDIRECT (EXT2_NINDIRECT * EXT2_NDINDIRECT)
+#define EXT2_MAXFILE (EXT2_NDIRECT + EXT2_NINDIRECT + EXT2_NDINDIRECT + EXT2_NTINDIRECT)
 #define ROOTINO  1   // root i-number
 #define BSIZE 1024  // block size
 #define EXT2_ROOTINO 2

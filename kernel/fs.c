@@ -71,7 +71,7 @@ fsinit(int dev) {
 }
 
 // Zero a block.
-static void
+/*static void
 bzero(int dev, int bno)
 {
   struct buf *bp;
@@ -80,13 +80,25 @@ bzero(int dev, int bno)
   memset(bp->data, 0, BSIZE);
   //log_write(bp);
   brelse(bp);
+}*/
+// Zero a block.
+static void
+bzero(int dev, int bno)
+{
+  struct buf *bp;
+
+  bp = bread(dev, bno);
+  memset(bp->data, 0, BSIZE);
+  //log_write(bp);
+  bwrite(bp);
+  brelse(bp);
 }
 
 // Blocks.
 
 // Allocate a zeroed disk block.
 // returns 0 if out of disk space.
-static uint
+/*static uint
 balloc(uint dev)
 {
   int b, bi, m;
@@ -109,10 +121,34 @@ balloc(uint dev)
   }
   printf("balloc: out of blocks\n");
   return 0;
+}*/
+static uint
+balloc(uint dev)
+{
+  int  fbit, zbno;
+  struct group_desc gdesc;
+  struct buf *bp1, *bp2;
+
+  bp1 = bread(dev, 2);
+  memmove(&gdesc, bp1->data, sizeof(gdesc));
+  brelse(bp1);
+  bp2 = bread(dev, gdesc.block_bitmap);
+
+  fbit = ext2fs_free_block((char *)bp2->data);
+  if (fbit > -1)
+  {
+    zbno = gdesc.block_bitmap + fbit;
+    bwrite(bp2);
+    bzero(dev, zbno);
+    brelse(bp2);
+    return zbno;
+  }
+  brelse(bp2);
+  panic("ext2_balloc: out of blocks\n");
 }
 
 // Free a disk block.
-static void
+/*static void
 bfree(int dev, uint b)
 {
   struct buf *bp;
@@ -126,6 +162,27 @@ bfree(int dev, uint b)
   bp->data[bi/8] &= ~m;
  // log_write(bp);
   brelse(bp);
+}*/
+// Free a disk block.
+static void
+bfree(int dev, uint b)
+{
+  int  mask;
+  struct group_desc bgdesc;
+  struct buf *bp1, *bp2;
+
+  bp1 = bread(dev, 2);
+  memmove(&bgdesc, bp1->data, sizeof(bgdesc));
+  bp2 = bread(dev, bgdesc.block_bitmap);
+  b -= bgdesc.block_bitmap;
+  mask = 1 << (b % 8);
+
+  if ((bp2->data[b / 8] & mask) == 0)
+    panic("ext2fs_bfree: block already free\n");
+  bp2->data[b / 8] = bp2->data[b / 8] & ~mask;
+  bwrite(bp2);
+  brelse(bp2);
+  brelse(bp1);
 }
 
 // Inodes.
@@ -480,6 +537,7 @@ ilock(struct inode *ip)
     ip->nlink = din.i_links_count;
     ip->size = din.i_size;
     //memmove(ad->addrs, din.i_block, sizeof(ad->addrs));
+    memmove(ip->addrs, din.i_block, sizeof(ip->addrs));
     ip->valid = 1;
     if(ip->type == 0)
         panic("ilock: no type");
@@ -596,7 +654,7 @@ iunlockput(struct inode *ip)
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
 // returns 0 if out of disk space.
-static uint
+/*static uint
 bmap(struct inode *ip, uint bn)
 {
   printf("called bmap\n");
@@ -636,7 +694,73 @@ bmap(struct inode *ip, uint bn)
   }
 
   panic("bmap: out of range");
+}*/
+static uint
+bmap(struct inode *ip, uint bn)
+{
+  uint addr, *a, *b, *c;
+  struct buf *bp, *bp1, *bp2;
+  uint *ad = ip->addrs;
+
+  if (bn < EXT2_NDIRECT){
+    if ((addr = ad[bn]) == 0)
+      ad[bn] = addr = balloc(ip->dev);
+    return addr;
+  }
+  bn -= EXT2_NDIRECT;
+  if (bn < EXT2_NINDIRECT){
+    if ((addr = ad[EXT2_IINDIRECT]) == 0)
+      ad[EXT2_IINDIRECT] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if ((addr = a[bn]) == 0)
+      a[bn] = addr = balloc(ip->dev);
+    brelse(bp);
+    return addr;
+  }
+  bn -= EXT2_NINDIRECT;
+
+  if (bn < EXT2_NDINDIRECT){
+    if ((addr = ad[EXT2_IDINDIRECT]) == 0)
+      ad[EXT2_IDINDIRECT] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if ((addr = a[bn / EXT2_NINDIRECT]) == 0)
+      a[bn / EXT2_NINDIRECT] = addr = balloc(ip->dev);
+    bp1 = bread(ip->dev, addr);
+    b = (uint *)bp1->data;
+    if ((addr = b[bn % EXT2_NINDIRECT]) == 0)
+      b[bn % EXT2_NINDIRECT] = addr = balloc(ip->dev);
+    brelse(bp);
+    brelse(bp1);
+    return addr;
+  }
+  bn -= EXT2_NDINDIRECT;
+
+  if (bn < EXT2_NTINDIRECT){
+    if ((addr = ad[EXT2_ITINDIRECT]) == 0)
+      ad[EXT2_ITINDIRECT] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if ((addr = a[bn / EXT2_NDINDIRECT]) == 0)
+      a[bn / EXT2_NDINDIRECT] = addr = balloc(ip->dev);
+    bp1 = bread(ip->dev, addr);
+    b = (uint *)bp1->data;
+    bn %= EXT2_NDINDIRECT;
+    if ((addr = b[bn / EXT2_NINDIRECT]) == 0)
+      b[bn / EXT2_NINDIRECT] = addr = balloc(ip->dev);
+    bp2 = bread(ip->dev, addr);
+    c = (uint *)bp2->data;
+    if ((addr = c[bn % EXT2_NINDIRECT]) == 0)
+      c[bn % EXT2_NINDIRECT] = addr = balloc(ip->dev);
+    brelse(bp);
+    brelse(bp1);
+    brelse(bp2);
+    return addr;
+  }
+  panic("ext2_bmap: block number out of range\n");
 }
+
 
 // Truncate inode (discard contents).
 // Caller must hold ip->lock.
