@@ -1,12 +1,11 @@
 #include "kernel/types.h"
-#include "kernel/stat.h"
+#include "kernel/fcntl.h"
 #include "user/user.h"
 #include "kernel/printcodes.h"
 
 int
 main(int argc, char *argv[])
 {
-  printinfo(ROOT_FILES, 0);
-  printf("here");
+  printinfo(CATFILE, (uint64)argv[1]);
   exit(0);
 }

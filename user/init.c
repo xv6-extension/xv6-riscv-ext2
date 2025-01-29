@@ -41,7 +41,7 @@ main(void)
   }
   dup(0);  // stdout
   dup(0);  // stderr
-  printf("shash\n");
+
   for(;;){
     printf("init: starting sh\n");
     pid = fork();

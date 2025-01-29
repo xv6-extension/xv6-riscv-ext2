@@ -146,6 +146,11 @@ struct ext2_dirent {
 	char	name[EXT2_NAME_LEN];	/* File name */
 };
 
-
 void
 print_root_files(void);
+
+void
+print_cwd_files(void);
+
+void
+print_cat_file(char *);

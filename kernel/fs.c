@@ -404,7 +404,7 @@ iupdate(struct inode *ip)
 static struct inode*
 iget(uint dev, uint inum)
 {
-  printf("called iget for inum %d\n", inum);
+  // printf("called iget for inum %d\n", inum);
   struct inode *ip, *empty;
 
   acquire(&itable.lock);
@@ -1032,32 +1032,6 @@ namecmp(const char *s, const char *t)
 
 // Look for a directory entry in a directory.
 // If found, set *poff to byte offset of entry.
-/*struct inode*
-dirlookup(struct inode *dp, char *name, uint *poff)
-{
-  printf("called dirloopkup\n");
-  uint off, inum;
-  struct dirent de;
-
-  if(dp->type != T_DIR)
-    panic("dirlookup not DIR");
-
-  for(off = 0; off < dp->size; off += sizeof(de)){
-    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
-      panic("dirlookup read");
-    if(de.inum == 0)
-      continue;
-    if(namecmp(name, de.name) == 0){
-      // entry matches path element
-      if(poff)
-        *poff = off;
-      inum = de.inum;
-      return iget(dp->dev, inum);
-    }
-  }
-
-  return 0;
-}*/
 struct inode*
 dirlookup(struct inode *dp, char *name, uint *poff)
 {
@@ -1074,7 +1048,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
       continue;
     strncpy(file_name, de.name, de.name_len);
     file_name[de.name_len] = '\0';
-    if((namecmp(name, de.name+1) == 0 && de.name[0]=='_') || namecmp(name, de.name) == 0){
+    if((namecmp(name, file_name+1) == 0 && de.name[0]=='_') || namecmp(name, file_name) == 0){
       // entry matches path element
       if(poff)
         *poff = off;
@@ -1089,10 +1063,10 @@ dirlookup(struct inode *dp, char *name, uint *poff)
 void
 print_root_files(void)
 {
-  printf("name |inum\n");
   uint off;
   struct ext2_dirent de;
   struct inode *dp;
+  printf("name | inum\n");
   dp = iget(ROOTDEV, EXT2_ROOTINO);
   ilock(dp);
   for(off = 0; off < dp->size; off += de.rec_len){
@@ -1102,6 +1076,41 @@ print_root_files(void)
       continue;
     printf("%s | %u\n", de.name, de.inode);
   }
+  iunlockput(dp);
+  exit(0);
+}
+
+void
+print_cwd_files(void)
+{
+  uint off;
+  struct ext2_dirent de;
+  struct inode *cwd_inode;
+  printf("name | inum\n");
+  cwd_inode=myproc()->cwd;
+  ilock(cwd_inode);
+  for(off = 0; off < cwd_inode->size; off += de.rec_len){
+    if(readi(cwd_inode, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+      panic("dirlookup read");
+    if(de.inode == 0)
+      continue;
+    printf("%s | %u\n", de.name, de.inode);
+  }
+  iunlockput(cwd_inode);
+  exit(0);
+}
+
+void
+print_cat_file(char * name)
+{
+  struct inode *dp, *fi;
+  uint poff;
+  dp = myproc()->cwd;
+  fi = dirlookup(dp, name, &poff);
+  char b[fi->size];
+  readi(fi, 0, (uint64)b, 0, sizeof(b));
+  printf("%s\n", b);
+  exit(0);
 }
 
 // Write a new directory entry (name, inum) into the directory dp.
