@@ -15,7 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
-
+static struct file *console_f = 0;
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -103,7 +103,8 @@ sys_close(void)
   if(argfd(0, &fd, &f) < 0)
     return -1;
   myproc()->ofile[fd] = 0;
-  fileclose(f);
+  if (f->major != CONSOLE)
+    fileclose(f);
   return 0;
 }
 
@@ -301,7 +302,7 @@ create(char *path, short type, short major, short minor)
   return 0;
 }
 
-uint64
+/*uint64
 sys_open(void)
 {
   char path[MAXPATH];
@@ -376,7 +377,89 @@ sys_open(void)
   end_op();
 
   return fd;
+}*/
+uint64
+sys_open(void)
+{
+  char path[MAXPATH];
+  int fd, omode;
+  struct file *f;
+  struct inode *ip;
+  int n;
+  char console[10]= "console";
+  argint(1, &omode);
+  if((n = argstr(0, path, MAXPATH)) < 0)
+    return -1;
+  struct proc *p;
+  p = myproc();
+  printf("\n%s %s\n", p->name, path);
+  if(strncmp(path, console, 10) ==0)
+  {
+    if (console_f)
+      return fdalloc(console_f);
+    console_f = filealloc();
+    console_f->type = FD_DEVICE;
+    console_f->major = CONSOLE;
+    fd = fdalloc(console_f);
+    return fd;
+  }
+  begin_op();
+
+
+  if(omode & O_CREATE){
+    ip = create(path, T_FILE, 0, 0);
+    if(ip == 0){
+      end_op();
+      return -1;
+    }
+  } else {
+    if((ip = namei(path)) == 0){
+      end_op();
+      return -1;
+    }
+    ilock(ip);
+    if(ip->type == T_DIR && omode != O_RDONLY){
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+  }
+
+  if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
+    if(f)
+      fileclose(f);
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  if(ip->type == T_DEVICE){
+    f->type = FD_DEVICE;
+    f->major = ip->major;
+  } else {
+    f->type = FD_INODE;
+    f->off = 0;
+  }
+  f->ip = ip;
+  f->readable = !(omode & O_WRONLY);
+  f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
+
+  if((omode & O_TRUNC) && ip->type == T_FILE){
+    itrunc(ip);
+  }
+
+  iunlock(ip);
+  end_op();
+
+  return fd;
 }
+
 
 uint64
 sys_mkdir(void)
