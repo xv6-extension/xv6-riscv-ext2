@@ -587,6 +587,39 @@ sys_printinfo(void)
   
   return 0;
 }
+uint64 sys_catsys(void)
+{
+      char *filename;
+    int fd;
+    char buf[512];
+    int n;
+
+  
+    filename = (char*)argstr(0);
+
+    
+    fd = open(filename, O_RDONLY);
+    if (fd < 0) {
+        return -1; 
+    }
+
+    
+    while ((n = read(fd, buf, sizeof(buf))) > 0) {
+        if (write(1, buf, n) != n) {
+            close(fd);
+            return -2;
+        }
+    }
+
+    if (n < 0) {
+        close(fd);
+        return -3; 
+    }
+
+    close(fd);
+    return 0; 
+ 
+}
 
 uint64
 sys_pipe(void)

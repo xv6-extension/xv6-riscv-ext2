@@ -2,7 +2,7 @@
 #include "kernel/fcntl.h"
 #include "user/user.h"
 
-char buf[512];
+/*char buf[512];
 
 void
 cat(int fd)
@@ -40,4 +40,31 @@ main(int argc, char *argv[])
     close(fd);
   }
   exit(0);
+}*/
+#define MAX_FILENAME_LENGTH 128
+
+int catsys(char *filename) {
+    return syscall(SYS_catsys, filename);
 }
+
+void cat_file(char *filename) {
+    int result = catsys(filename);  
+    if (result < 0) {
+        printf(2, "cat: error reading file %s\n", filename);
+    }
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+      
+        exit();
+    }
+
+    
+    for (int i = 1; i < argc; i++) {
+        cat_file(argv[i]);
+    }
+
+    exit();
+}
+

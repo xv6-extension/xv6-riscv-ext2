@@ -36,3 +36,4 @@ entry("sbrk");
 entry("sleep");
 entry("uptime");
 entry("printinfo");
+entry("catsys");
