@@ -951,7 +951,8 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
   for(tot = 0; tot < n; tot += m, off += m, dst += m){
     bp = bread(ip->dev, bmap(ip, off / BSIZE));
     m = min(n - tot, BSIZE - off % BSIZE);
-    memmove((char*)dst, bp->data + off % BSIZE, m);
+    //memmove((char*)dst, bp->data + off % BSIZE, m);
+    either_copyout(user_dst, dst, bp->data + (off % BSIZE), m);
     brelse(bp);
   }
   return n;
@@ -1088,6 +1089,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
 void
 print_root_files(void)
 {
+  printf("name |inum\n");
   uint off;
   struct ext2_dirent de;
   struct inode *dp;
@@ -1098,7 +1100,7 @@ print_root_files(void)
       panic("dirlookup read");
     if(de.inode == 0)
       continue;
-    printf("FILE NAME: %s\n", de.name);
+    printf("%s | %u\n", de.name, de.inode);
   }
 }
 
