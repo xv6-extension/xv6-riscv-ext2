@@ -8,12 +8,31 @@
 #include "kernel/file.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
+#include "kernel/printcodes.h"
 
 char *argv[] = { "sh", 0 };
 
 int
 main(void)
 {
+  // printinfo(ROOT_FILES, 0);
+  // TEMPORARY COMMENT
+  /*
+  // print root directory files
+  printinfo(ROOT_FILES, 0);
+  // read file "sample.txt" content
+  int fd;
+  fd = open("/sample.txt", O_RDWR);
+  int n;
+  char * buf[1000];
+  while((n = read(fd, buf, sizeof(buf))) > 0) {
+    printinfo(PRINT_STR, (uint64)buf);
+  }
+  */
+
+
+  // CONSOLE PROBLEMS
+  
   int pid, wpid;
 
   if(open("console", O_RDWR) < 0){
@@ -22,7 +41,7 @@ main(void)
   }
   dup(0);  // stdout
   dup(0);  // stderr
-
+  printf("shash\n");
   for(;;){
     printf("init: starting sh\n");
     pid = fork();
@@ -51,4 +70,5 @@ main(void)
       }
     }
   }
+  
 }

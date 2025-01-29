@@ -1085,6 +1085,23 @@ dirlookup(struct inode *dp, char *name, uint *poff)
   return 0;
 }
 
+void
+print_root_files(void)
+{
+  uint off;
+  struct ext2_dirent de;
+  struct inode *dp;
+  dp = iget(ROOTDEV, EXT2_ROOTINO);
+  ilock(dp);
+  for(off = 0; off < dp->size; off += de.rec_len){
+    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+      panic("dirlookup read");
+    if(de.inode == 0)
+      continue;
+    printf("FILE NAME: %s\n", de.name);
+  }
+}
+
 // Write a new directory entry (name, inum) into the directory dp.
 // Returns 0 on success, -1 on failure (e.g. out of disk blocks).
 int

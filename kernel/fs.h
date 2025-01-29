@@ -147,3 +147,5 @@ struct ext2_dirent {
 };
 
 
+void
+print_root_files(void);

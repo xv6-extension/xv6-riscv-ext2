@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "printcodes.h"
 static struct file *console_f = 0;
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -400,6 +401,8 @@ sys_open(void)
     console_f = filealloc();
     console_f->type = FD_DEVICE;
     console_f->major = CONSOLE;
+    console_f->readable = 1;
+    console_f->writable = 1;
     fd = fdalloc(console_f);
     return fd;
   }
@@ -564,6 +567,25 @@ sys_exec(void)
   for(i = 0; i < NELEM(argv) && argv[i] != 0; i++)
     kfree(argv[i]);
   return -1;
+}
+
+uint64
+sys_printinfo(void)
+{
+  int cond;
+  uint64 ptr;
+  argint(0, &cond);
+  argaddr(1, &ptr);
+  if (cond == ROOT_FILES)
+    print_root_files();
+  else if (cond == PRINT_STR)
+  {
+    printf("%s", (char *)ptr);
+  }
+  else
+    printf("incorrect code\n");
+  
+  return 0;
 }
 
 uint64
